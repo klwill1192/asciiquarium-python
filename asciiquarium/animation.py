@@ -583,7 +583,7 @@ class Animation:
         """Return the current Easter Egg mask/default-color pair."""
         pattern = EASTER_EGG_PATTERNS[EASTER_EGG_PATTERN_NAME]
 
-        frame = getattr(self, "frame_count", 0)
+        frame = self.happy_fish_frame_count
         index = (frame // EASTER_EGG_FRAME_STEP) % len(pattern)
 
         return pattern[index]
