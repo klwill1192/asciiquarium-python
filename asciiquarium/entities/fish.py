@@ -44,6 +44,30 @@ FOOD_CHASE_DX = 0.30
 FOOD_CHASE_DY = 0.25
 MOUTH_X_TOLERANCE = 2
 MOUTH_Y_TOLERANCE = 1
+HAPPY_FISH_BUBBLE_THRESHOLD = 90
+HAPPY_FISH_SMALL_SPEED_BOOST = 0.45
+HAPPY_FISH_MEDIUM_SPEED_BOOST = 0.30
+HAPPY_FISH_LARGE_SPEED_BOOST = 0.15
+HAPPY_FISH_DANCE_VERTICAL_SPEED = 0.45
+HAPPY_FISH_DANCE_PERIOD = 20
+HAPPY_FISH_BUBBLE_BURST_COUNT = 4
+HAPPY_FISH_SPARKLE_CHANCE_PERCENT = 35
+HAPPY_FISH_SPARKLE_COLORS = [
+    "YELLOW",
+    "MAGENTA",
+    "CYAN",
+    "WHITE",
+]
+HAPPY_FISH_RAINBOW_COLORS = [
+    "RED",
+    "YELLOW",
+    "GREEN",
+    "CYAN",
+    "BLUE",
+    "MAGENTA",
+    "WHITE",
+]
+HAPPY_FISH_RAINBOW_FRAME_STEP = 2
 
 
 def fish_speed(fish: Entity) -> float:
@@ -150,19 +174,175 @@ def add_munch(fish: Entity, anim: Any):
         die_frame=3,
     )
 
+def happy_fish_speed_boost(fish: Entity) -> float:
+    """Return a size-based Happy Fish speed boost."""
+    fish_w, fish_h = fish.size()
+    fish_area = fish_w * fish_h
 
-def fish_callback(fish: Entity, anim: Any) -> bool:
-    """Fish behavior - blow bubbles, and chase food when any is within range"""
-    if random.randint(1, 100) > 97:
+    if fish_area <= 30:
+        return HAPPY_FISH_SMALL_SPEED_BOOST
+    if fish_area <= 70:
+        return HAPPY_FISH_MEDIUM_SPEED_BOOST
+    return HAPPY_FISH_LARGE_SPEED_BOOST
+
+
+def happy_fish_dance_dy(fish: Entity, anim: Any) -> float:
+    """Return the vertical Happy Fish dance offset for this frame."""
+    phase = (
+        anim.happy_fish_frame_count
+        + int(abs(fish.x) + abs(fish.y))
+    ) % HAPPY_FISH_DANCE_PERIOD
+
+    if phase < 5:
+        dy = -HAPPY_FISH_DANCE_VERTICAL_SPEED
+    elif phase < 10:
+        dy = 0.0
+    elif phase < 15:
+        dy = HAPPY_FISH_DANCE_VERTICAL_SPEED
+    else:
+        dy = 0.0
+
+    fish_w, fish_h = fish.size()
+
+    if dy < 0 and fish.y <= WATER_LINE_BOTTOM:
+        return 0.0
+
+    if dy > 0 and fish.y + fish_h >= anim.height() - 3:
+        return 0.0
+
+    return dy
+
+
+def add_happy_fish_bubble_burst(fish: Entity, anim: Any) -> None:
+    """Emit the one-time Happy Fish bubble burst."""
+    for _ in range(HAPPY_FISH_BUBBLE_BURST_COUNT):
         add_bubble(fish, anim)
 
+
+def add_happy_fish_sparkle(fish: Entity, anim: Any) -> None:
+    """Add a short-lived sparkle near a Happy Fish."""
+    fish_x, fish_y, fish_z = fish.position()
+    fish_w, fish_h = fish.size()
+
+    sparkle_x = fish_x + random.randint(0, max(0, fish_w - 1))
+    sparkle_y = fish_y + random.randint(0, max(0, fish_h - 1))
+
+    anim.new_entity(
+        entity_type="happy_sparkle",
+        shape=["*", "+", ".", " "],
+        position=[sparkle_x, sparkle_y, fish_z - 1],
+        callback_args=[
+            random.choice([-0.05, 0, 0.05]),
+            -0.15,
+            0,
+            0.45,
+        ],
+        die_offscreen=True,
+        default_color=random.choice(HAPPY_FISH_SPARKLE_COLORS),
+        auto_trans=True,
+        die_frame=4,
+    )
+
+
+def apply_happy_fish_rainbow_color(entity: Entity, anim: Any) -> None:
+    """Temporarily cycle an entity through bright rainbow colors."""
+    if not hasattr(entity, "base_default_color"):
+        entity.base_default_color = entity.default_color
+
+    if not hasattr(entity, "base_colors"):
+        entity.base_colors = (
+            list(entity.colors)
+            if isinstance(entity.colors, list)
+            else entity.colors
+        )
+
+    phase_offset = int(abs(entity.x) + abs(entity.y))
+
+    color_index = (
+        (anim.happy_fish_frame_count // HAPPY_FISH_RAINBOW_FRAME_STEP)
+        + phase_offset
+    ) % len(HAPPY_FISH_RAINBOW_COLORS)
+
+    mask_chars = ["r", "y", "g", "c", "b", "m", "w"]
+    mask_char = mask_chars[color_index]
+
+    entity.default_color = HAPPY_FISH_RAINBOW_COLORS[color_index]
+
+    def mask_for_shape(shape_text: str) -> str:
+        return "\n".join(
+            "".join(mask_char if ch != " " else " " for ch in line)
+            for line in shape_text.split("\n")
+        )
+
+    entity.colors = [
+        mask_for_shape(shape)
+        for shape in entity.shapes
+    ]
+
+
+def restore_happy_fish_base_color(entity: Entity) -> None:
+    """Restore an entity's original colors after Happy Fish mode."""
+    if hasattr(entity, "base_colors"):
+        entity.colors = list(entity.base_colors)
+
+    if hasattr(entity, "base_default_color"):
+        entity.default_color = entity.base_default_color
+
+
+def fish_callback(fish: Entity, anim: Any) -> bool:
+    """Fish behavior - bubbles, feeding, and Happy Fish celebration."""
+    happy = bool(
+        getattr(anim, "happy_fish_active", lambda: False)()
+    )
+
+    if fish.entity_type == "shark":
+        happy = False
+
+    if happy and getattr(fish, "happy_fish_burst_pending", False):
+        add_happy_fish_bubble_burst(fish, anim)
+        fish.happy_fish_burst_pending = False
+    elif not happy:
+        fish.happy_fish_burst_pending = False
+
+    bubble_threshold = HAPPY_FISH_BUBBLE_THRESHOLD if happy else 97
+
+    if random.randint(1, 100) > bubble_threshold:
+        add_bubble(fish, anim)
+
+    if (
+        happy
+        and random.randint(1, 100)
+        <= HAPPY_FISH_SPARKLE_CHANCE_PERCENT
+    ):
+        add_happy_fish_sparkle(fish, anim)
+
+    food = None
+
     if isinstance(fish.callback_args, list) and fish.callback_args:
-        food = nearest_food(fish, anim)
+        # Happy Fish deliberately ignores food while celebrating.
+        if not happy:
+            food = nearest_food(fish, anim)
+
         if food:
             chase_food(fish, food, anim)
 
-    return fish.move_entity(anim)
+    if happy:
+        speed = fish_speed(fish)
+        boost = happy_fish_speed_boost(fish)
 
+        if speed > 0:
+            fish.x += boost
+        elif speed < 0:
+            fish.x -= boost
+
+        fish.y += happy_fish_dance_dy(fish, anim)
+
+        apply_happy_fish_rainbow_color(fish, anim)
+    else:
+        restore_happy_fish_base_color(fish)
+
+    return fish.move_entity(anim)
+    
 
 def fish_collision(fish: Entity, anim: Any):
     """Handle fish collision with food, predators, and the fishing hook"""

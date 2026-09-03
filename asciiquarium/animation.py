@@ -75,6 +75,8 @@ class Animation:
         self.entities: List[Entity] = []
         self.color_enabled = True
         self.running = False
+        self.happy_fish_until: float = 0.0
+        self.happy_fish_frame_count: int = 0
         self.screen_width: int = 0
         self.screen_height: int = 0
         self.color_pairs: Dict[str, int] = {}
@@ -304,6 +306,9 @@ class Animation:
 
         current_time = time.time()
 
+        self.happy_fish_frame_count += 1
+        self.update_happy_fish_entity_effects()
+
         for entity in self.entities[:]:
             entity.update(self)
 
@@ -363,6 +368,7 @@ class Animation:
                 "    P or p  - Pause/unpause animation",
                 "    R or r  - Redraw and respawn entities",
                 "    F or f  - Drop food for the fish",
+                "    H or h  - Happy Fish mode",
                 "    I or i  - Show/hide this info screen",
                 "",
                 "  CREDITS:",
@@ -390,6 +396,120 @@ class Animation:
 
         except curses.error:
             pass
+
+def start_happy_fish(self) -> None:
+    """Start a 10-second Happy Fish celebration mode."""
+    self.happy_fish_until = time.monotonic() + 10.0
+
+    # Queue one-time celebration effects.
+    for entity in self.entities:
+        if entity.entity_type in (
+            "fish",
+            "whale",
+            "dolphin",
+            "old_monster",
+            "new_monster",
+            "big_fish",
+            "big_fish_2",
+        ):
+            setattr(entity, "happy_fish_burst_pending", True)
+
+    def happy_fish_active(self) -> bool:
+        """Return True while Happy Fish mode is active."""
+        return time.monotonic() < self.happy_fish_until
+
+    def update_happy_fish_entity_effects(self) -> None:
+        """Apply Happy Fish effects to special animated entities."""
+        happy = self.happy_fish_active()
+
+        rainbow_mask_chars = ["r", "y", "g", "c", "b", "m", "w"]
+        rainbow_default_colors = [
+            "RED",
+            "YELLOW",
+            "GREEN",
+            "CYAN",
+            "BLUE",
+            "MAGENTA",
+            "WHITE",
+        ]
+
+        happy_special_types = (
+            "whale",
+            "dolphin",
+            "old_monster",
+            "new_monster",
+            "big_fish",
+            "big_fish_2",
+        )
+
+        for entity in self.entities:
+            if entity.entity_type not in happy_special_types:
+                continue
+
+            if not hasattr(entity, "base_default_color"):
+                entity.base_default_color = entity.default_color
+
+            if not hasattr(entity, "base_colors"):
+                entity.base_colors = (
+                    list(entity.colors)
+                    if isinstance(entity.colors, list)
+                    else entity.colors
+                )
+
+            if isinstance(entity.callback_args, list) and len(entity.callback_args) >= 4:
+                if not hasattr(entity, "base_frame_speed"):
+                    entity.base_frame_speed = entity.callback_args[3]
+
+            if happy:
+                color_index = (
+                    (self.happy_fish_frame_count // 2)
+                    + int(abs(entity.x) + abs(entity.y))
+                ) % len(rainbow_mask_chars)
+
+                mask_char = rainbow_mask_chars[color_index]
+                entity.default_color = rainbow_default_colors[color_index]
+
+                def mask_for_shape(shape_text: str) -> str:
+                    return "\n".join(
+                        "".join(mask_char if ch != " " else " " for ch in line)
+                        for line in str(shape_text).split("\n")
+                    )
+
+                if isinstance(entity.shapes, list) and entity.shapes:
+                    entity.colors = [
+                        mask_for_shape(shape)
+                        for shape in entity.shapes
+                    ]
+                else:
+                    entity.colors = [
+                        mask_for_shape(entity.get_current_shape())
+                    ]
+
+                if isinstance(entity.callback_args, list) and len(entity.callback_args) >= 4:
+                    entity.callback_args[3] = 2.0
+
+                if (
+                    entity.entity_type == "whale"
+                    and getattr(entity, "happy_fish_burst_pending", False)
+                ):
+                    entity.current_frame = max(entity.current_frame, 5)
+                    entity.happy_fish_burst_pending = False
+
+            else:
+                if hasattr(entity, "base_colors"):
+                    entity.colors = list(entity.base_colors)
+
+                if hasattr(entity, "base_default_color"):
+                    entity.default_color = entity.base_default_color
+
+                if (
+                    isinstance(entity.callback_args, list)
+                    and len(entity.callback_args) >= 4
+                    and hasattr(entity, "base_frame_speed")
+                ):
+                    entity.callback_args[3] = entity.base_frame_speed
+
+                entity.happy_fish_burst_pending = False
 
     def run(self, setup_callback: Callable):
         """Main animation loop"""
@@ -433,6 +553,9 @@ class Animation:
                             elif key_char == "f":
                                 if not paused and not showing_info:
                                     add_food(None, self)
+                            elif key_char == "h":
+                                if not paused and not showing_info:
+                                    self.start_happy_fish()
                             elif key_char == "i":
                                 showing_info = not showing_info
                                 if showing_info:
