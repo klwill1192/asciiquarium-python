@@ -560,6 +560,10 @@ class Animation:
 
     def start_easter_egg(self) -> None:
         """Start Angry Fish / Easter Egg mode."""
+
+        if self.easter_egg_active():
+            return
+
         from .entities.special import add_shark
 
         now = time.monotonic()
