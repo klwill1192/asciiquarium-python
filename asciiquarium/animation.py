@@ -53,6 +53,37 @@ WATER_LINE_BOTTOM = 9
 # ROADMAP item 36 exposes it as --fps.
 FRAME_INTERVAL = 0.1
 
+EASTER_EGG_DURATION_SECONDS = 10.0
+EASTER_EGG_SECOND_SHARK_SECONDS = 5.0
+EASTER_EGG_PATTERN_NAME = "red_red_red_white"
+EASTER_EGG_FRAME_STEP = 2
+
+EASTER_EGG_PATTERNS = {
+    "red_white_red_white": [
+        ("r", "RED"),
+        ("w", "WHITE"),
+        ("r", "RED"),
+        ("w", "WHITE"),
+    ],
+    "red_black_red_black": [
+        ("r", "RED"),
+        ("k", "BLACK"),
+        ("r", "RED"),
+        ("k", "BLACK"),
+    ],
+    "red_white_red_black": [
+        ("r", "RED"),
+        ("w", "WHITE"),
+        ("r", "RED"),
+        ("k", "BLACK"),
+    ],
+    "red_red_red_white": [
+        ("r", "RED"),
+        ("r", "RED"),
+        ("r", "RED"),
+        ("w", "WHITE"),
+    ],
+}
 
 def next_deadline(now: float, deadline: float, interval: float = FRAME_INTERVAL) -> float:
     """When the frame after this one is due.
@@ -77,6 +108,9 @@ class Animation:
         self.running = False
         self.happy_fish_until: float = 0.0
         self.happy_fish_frame_count: int = 0
+        self.easter_egg_until = 0.0
+        self.easter_egg_started_at = 0.0
+        self.easter_egg_second_shark_spawned = False
         self.screen_width: int = 0
         self.screen_height: int = 0
         self.color_pairs: Dict[str, int] = {}
@@ -308,7 +342,8 @@ class Animation:
 
         self.happy_fish_frame_count += 1
         self.update_happy_fish_entity_effects()
-
+        self.update_easter_egg()
+        
         for entity in self.entities[:]:
             entity.update(self)
 
@@ -421,6 +456,7 @@ class Animation:
     def update_happy_fish_entity_effects(self) -> None:
         """Apply Happy Fish effects to special animated entities."""
         happy = self.happy_fish_active()
+        easter_egg = self.easter_egg_active()
 
         rainbow_mask_chars = ["r", "y", "g", "c", "b", "m", "w"]
         rainbow_default_colors = [
@@ -442,8 +478,10 @@ class Animation:
             "big_fish_2",
         )
 
+        easter_egg_special_types = happy_special_types + ("shark",)
+
         for entity in self.entities:
-            if entity.entity_type not in happy_special_types:
+            if entity.entity_type not in easter_egg_special_types:
                 continue
 
             if not hasattr(entity, "base_default_color"):
@@ -460,14 +498,23 @@ class Animation:
                 if not hasattr(entity, "base_frame_speed"):
                     entity.base_frame_speed = entity.callback_args[3]
 
-            if happy:
-                color_index = (
-                    (self.happy_fish_frame_count // 2)
-                    + int(abs(entity.x) + abs(entity.y))
-                ) % len(rainbow_mask_chars)
+            entity_effect_active = (
+                easter_egg
+                or (happy and entity.entity_type in happy_special_types)
+            )
 
-                mask_char = rainbow_mask_chars[color_index]
-                entity.default_color = rainbow_default_colors[color_index]
+            if entity_effect_active:
+                if easter_egg:
+                    mask_char, default_color = self.easter_egg_color_pair()
+                    entity.default_color = default_color
+                else:
+                    color_index = (
+                        (self.happy_fish_frame_count // 2)
+                        + int(abs(entity.x) + abs(entity.y))
+                    ) % len(rainbow_mask_chars)
+
+                    mask_char = rainbow_mask_chars[color_index]
+                    entity.default_color = rainbow_default_colors[color_index]
 
                 def mask_for_shape(shape_text: str) -> str:
                     return "\n".join(
@@ -510,6 +557,48 @@ class Animation:
                     entity.callback_args[3] = entity.base_frame_speed
 
                 entity.happy_fish_burst_pending = False
+
+    def start_easter_egg(self) -> None:
+        """Start Angry Fish / Easter Egg mode."""
+        from .entities.special import add_shark
+
+        now = time.monotonic()
+
+        self.easter_egg_started_at = now
+        self.easter_egg_until = now + EASTER_EGG_DURATION_SECONDS
+        self.easter_egg_second_shark_spawned = False
+
+        add_shark(None, self, direction=0)
+
+    def easter_egg_active(self) -> bool:
+        """Return True while Angry Fish / Easter Egg mode is active."""
+        return time.monotonic() < self.easter_egg_until
+
+
+    def easter_egg_color_pair(self) -> tuple[str, str]:
+        """Return the current Easter Egg mask/default-color pair."""
+        pattern = EASTER_EGG_PATTERNS[EASTER_EGG_PATTERN_NAME]
+
+        frame = getattr(self, "frame_count", 0)
+        index = (frame // EASTER_EGG_FRAME_STEP) % len(pattern)
+
+        return pattern[index]
+
+    def update_easter_egg(self) -> None:
+        """Handle timed Easter Egg events."""
+        if not self.easter_egg_active():
+            return
+
+        elapsed = time.monotonic() - self.easter_egg_started_at
+
+        if (
+            elapsed >= EASTER_EGG_SECOND_SHARK_SECONDS
+            and not self.easter_egg_second_shark_spawned
+        ):
+            from .entities.special import add_shark
+            
+            add_shark(None, self, direction=1)
+            self.easter_egg_second_shark_spawned = True
 
     def run(self, setup_callback: Callable):
         """Main animation loop"""
@@ -556,6 +645,9 @@ class Animation:
                             elif key_char == "h":
                                 if not paused and not showing_info:
                                     self.start_happy_fish()
+                            elif key_char == "e":
+                                if not paused and not showing_info:
+                                    self.start_easter_egg()
                             elif key_char == "i":
                                 showing_info = not showing_info
                                 if showing_info:

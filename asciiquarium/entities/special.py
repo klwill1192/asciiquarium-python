@@ -6,7 +6,11 @@ from ..entity import Entity
 from .fish import rand_color
 
 
-def add_shark(old_ent: Optional[Entity], anim: Any):
+def add_shark(
+    old_ent: Optional[Entity],
+    anim: Any,
+    direction: Optional[int] = None,
+):
     """Add a shark that eats small fish"""
     shark_shapes = [
         """                              __
@@ -36,7 +40,8 @@ def add_shark(old_ent: Optional[Entity], anim: Any):
         "\n\n\n\n        Rc\n\n  WWWWWWWWc\n\n\n\n",
     ]
 
-    direction = random.randint(0, 1)
+    if direction is None:
+        direction = random.randint(0, 1)
     x = -53
     y = random.randint(9, max(9, anim.height() - (10 + 9))) + 9 if anim.height() > 19 else 9
     teeth_x = -9

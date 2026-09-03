@@ -279,9 +279,41 @@ def apply_happy_fish_rainbow_color(entity: Entity, anim: Any) -> None:
         for shape in entity.shapes
     ]
 
+def apply_easter_egg_color(entity: Entity, anim: Any) -> None:
+    """Temporarily apply the Easter Egg color pattern to the fish body."""
+    if not hasattr(entity, "base_default_color"):
+        entity.base_default_color = getattr(entity, "default_color", None)
+
+    if not hasattr(entity, "base_colors"):
+        current_colors = getattr(entity, "colors", None)
+        entity.base_colors = (
+            list(current_colors)
+            if isinstance(current_colors, list)
+            else current_colors
+        )
+
+    color_pair_fn = getattr(anim, "easter_egg_color_pair", None)
+
+    if callable(color_pair_fn):
+        mask_char, default_color = color_pair_fn()
+    else:
+        mask_char, default_color = "r", "RED"
+
+    entity.default_color = default_color
+
+    def mask_for_shape(shape_text: str) -> str:
+        return "\n".join(
+            "".join(
+                mask_char if ch != " " else " "
+                for ch in line
+            )
+            for line in shape_text.splitlines()
+        )
+
+    entity.colors = [mask_for_shape(entity.get_current_shape())]
 
 def restore_happy_fish_base_color(entity: Entity) -> None:
-    """Restore an entity's original colors after Happy Fish mode."""
+    """Restore an entity's original colors after Happy Fish or Easter Egg mode."""
     if hasattr(entity, "base_colors"):
         entity.colors = list(entity.base_colors)
 
@@ -290,13 +322,18 @@ def restore_happy_fish_base_color(entity: Entity) -> None:
 
 
 def fish_callback(fish: Entity, anim: Any) -> bool:
-    """Fish behavior - bubbles, feeding, and Happy Fish celebration."""
+    """Fish behavior - bubbles, feeding, Happy Fish, and Easter Egg."""
     happy = bool(
         getattr(anim, "happy_fish_active", lambda: False)()
+    )
+    easter_egg = bool(
+        getattr(anim, "easter_egg_active", lambda: False)()
     )
 
     if fish.entity_type == "shark":
         happy = False
+
+    visual_effect = happy or easter_egg
 
     if happy and getattr(fish, "happy_fish_burst_pending", False):
         add_happy_fish_bubble_burst(fish, anim)
@@ -326,7 +363,7 @@ def fish_callback(fish: Entity, anim: Any) -> bool:
         if food:
             chase_food(fish, food, anim)
 
-    if happy:
+    if visual_effect:
         speed = fish_speed(fish)
         boost = happy_fish_speed_boost(fish)
 
@@ -337,7 +374,10 @@ def fish_callback(fish: Entity, anim: Any) -> bool:
 
         fish.y += happy_fish_dance_dy(fish, anim)
 
-        apply_happy_fish_rainbow_color(fish, anim)
+        if easter_egg:
+            apply_easter_egg_color(fish, anim)
+        else:
+            apply_happy_fish_rainbow_color(fish, anim)
     else:
         restore_happy_fish_base_color(fish)
 
