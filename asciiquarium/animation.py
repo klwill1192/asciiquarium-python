@@ -397,22 +397,22 @@ class Animation:
         except curses.error:
             pass
 
-def start_happy_fish(self) -> None:
-    """Start a 10-second Happy Fish celebration mode."""
-    self.happy_fish_until = time.monotonic() + 10.0
+    def start_happy_fish(self) -> None:
+        """Start a 10-second Happy Fish celebration mode."""
+        self.happy_fish_until = time.monotonic() + 10.0
 
-    # Queue one-time celebration effects.
-    for entity in self.entities:
-        if entity.entity_type in (
-            "fish",
-            "whale",
-            "dolphin",
-            "old_monster",
-            "new_monster",
-            "big_fish",
-            "big_fish_2",
-        ):
-            setattr(entity, "happy_fish_burst_pending", True)
+        # Queue one-time celebration effects.
+        for entity in self.entities:
+            if entity.entity_type in (
+                "fish",
+                "whale",
+                "dolphin",
+                "old_monster",
+                "new_monster",
+                "big_fish",
+                "big_fish_2",
+            ):
+                setattr(entity, "happy_fish_burst_pending", True)
 
     def happy_fish_active(self) -> bool:
         """Return True while Happy Fish mode is active."""
