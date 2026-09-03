@@ -5,12 +5,13 @@ from ..animation import DEPTH
 from ..entity import Entity
 from .fish import rand_color
 
-
 def add_shark(
     old_ent: Optional[Entity],
     anim: Any,
     direction: Optional[int] = None,
+    respawn: bool = True,
 ):
+
     """Add a shark that eats small fish"""
     shark_shapes = [
         """                              __
@@ -70,9 +71,8 @@ def add_shark(
         default_color="CYAN",
         callback_args=[speed, 0, 0],
         die_offscreen=True,
-        death_cb=shark_death,
+        death_cb=shark_death if respawn else temporary_shark_death,
     )
-
 
 def shark_death(shark: Entity, anim: Any):
     """When shark dies, kill its teeth and spawn new random object"""
@@ -80,6 +80,12 @@ def shark_death(shark: Entity, anim: Any):
     for obj in teeth:
         anim.del_entity(obj)
     random_object(shark, anim)
+
+def temporary_shark_death(shark: Entity, anim: Any):
+    """Clean up a temporary shark without spawning another special entity."""
+    teeth = anim.get_entities_of_type("teeth")
+    for obj in teeth:
+        anim.del_entity(obj)
 
 
 def add_ship(old_ent: Optional[Entity], anim: Any):

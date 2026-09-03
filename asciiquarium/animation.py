@@ -572,7 +572,7 @@ class Animation:
         self.easter_egg_until = now + EASTER_EGG_DURATION_SECONDS
         self.easter_egg_second_shark_spawned = False
 
-        add_shark(None, self, direction=0)
+        add_shark(None, self, direction=0, respawn=False)
 
     def easter_egg_active(self) -> bool:
         """Return True while Angry Fish / Easter Egg mode is active."""
@@ -601,7 +601,7 @@ class Animation:
         ):
             from .entities.special import add_shark
             
-            add_shark(None, self, direction=1)
+            add_shark(None, self, direction=1, respawn=False)
             self.easter_egg_second_shark_spawned = True
 
     def run(self, setup_callback: Callable):
